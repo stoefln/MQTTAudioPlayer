@@ -7,7 +7,9 @@ import json
 import pkgutil
 import sched, time
 from enum import Enum
-from threading import Thread
+import threading
+from dateutil import parser
+import datetime
 
 # ---------------------------------------------------
 # 3rd Party Libs (install with pip)
@@ -22,29 +24,32 @@ class GameModes(Enum):
     LOOP = "LOOP"
 
 class Application(Frame):
-    TRIGGER_LEVEL = 70
+    TRIGGER_LEVEL = 30
     scheduler = sched.scheduler(time.time, time.sleep)
     playStates = {}
     sensorStates = {}
     buttons = {}
     currentMode = GameModes.SINGLE_HIT
     setIndex = 0
+    currentStep = None
 
     def load(self):
         print "loading sounds into PD.."
         command = ""
-        currentSet = conf.SoundSets[self.currentMode][self.setIndex]
+        path = conf.SoundSets.keys()[self.setIndex]
+        soundSet = conf.SoundSets[path]
+
         for k in conf.SensorNames:
-            v = conf.SensorNames[k]
-            command += v + " load "+currentSet["path"]+"/" + v.replace(" ", "") + ".wav,"
-        print "command: "+command
+            channelName = conf.SensorNames[k]
+            command += channelName + " load "+path+"/" + channelName.replace(" ", "") + ".wav,"
+            self.playStates[channelName] = False
+            self.enableButton(channelName, False)
+
         self.sendToPd(command)
+            
     
     def singleHit(self, channelName):
         self.sendToPd(channelName+" play")
-        self.enableButton(channelName, True)
-        self.scheduler.enter(2, 1, self.enableButton, (channelName, False))
-        self.scheduler.run()
         
     def buttonPress(self, channelName):
         if(self.currentMode == GameModes.SINGLE_HIT):
@@ -59,7 +64,6 @@ class Application(Frame):
             self.enableButton(channelName, self.playStates.get(channelName))
 
     def enableButton(self, channelName, enable):
-        print("enablebutton", channelName, enable)
         color = 'black' if enable else 'white'
         self.buttons[channelName].configure(highlightbackground=color)
 
@@ -67,31 +71,103 @@ class Application(Frame):
         print("sending command to PD: "+command)
         os.system("echo '" + command + "' | "+conf.SystemSettings["pdSendPath"]+" 3000 localhost udp")
 
-    def switchMode(self):
-        setIndex = 0
+    def switchSetIndex(self, index):
+        self.setIndex = (index) % len(conf.SoundSets.keys())
+        soundSet = conf.SoundSets.get(conf.SoundSets.keys()[self.setIndex])
+        self.currentMode = GameModes.SINGLE_HIT if soundSet['mode'] == 'SINGLE_HIT' else GameModes.LOOP
+        print("New setIndex: "+str(self.setIndex))
         if(self.currentMode == GameModes.SINGLE_HIT):
-            self.currentMode = GameModes.LOOP
-            self.sendToPd("loop start 60, all volume 0") 
-
-        else:
-            self.currentMode = GameModes.SINGLE_HIT
             self.sendToPd("loop stop, all volume 1")
-  
+        else:
+            self.sendToPd("loop start 60, all volume 0") 
         print("New mode: "+self.currentMode)
         self.updateModeButton()
-        self.switchSetIndex()
-
+        self.updateSetIndexButton()
+        self.load()
+        
+    def updateSetIndexButton(self):
+        self.setIndexButton["text"] = "Set: "+conf.SoundSets.keys()[self.setIndex]
+    
     def updateModeButton(self):
         self.modeButton["text"] = "Mode: "+self.currentMode
 
-    def switchSetIndex(self):
-        self.setIndex = (self.setIndex + 1) % len(conf.SoundSets[self.currentMode])
-        print("New setIndex: "+str(self.setIndex))
-        self.updateSetIndexButton()
-        self.load()
 
-    def updateSetIndexButton(self):
-        self.setIndexButton["text"] = "Set: "+conf.SoundSets[self.currentMode][self.setIndex]['path']
+    def enableChannel(self, channelName):
+        if(self.playStates[channelName]):
+            return
+        self.sendToPd(channelName + " volume 1")
+        self.playStates[channelName] = True
+        self.buttons[channelName].configure(highlightbackground='black')
+    
+    def disableChannel(self, channelName):
+        if(not self.playStates[channelName]):
+            return
+        self.sendToPd(channelName + " volume 0")
+        self.playStates[channelName] = False
+        self.buttons[channelName].configure(highlightbackground='white')
+
+    def onMessage(self, client, userdata, message):
+        '''
+        Callback for MQTT messages
+        {"k": "XXX", "v": 100}
+        '''
+        print(str(message.payload.decode("utf-8")))
+        val = json.loads(str(message.payload.decode("utf-8")))   
+        v = 0.0
+        channelName = ""
+        try:
+            sensorId = val['k']
+            v = int(val['v'])
+        except:
+            print('Could not digest ' + str(message.payload.decode("utf-8")))
+
+        channelName = conf.SensorNames.get(sensorId)
+        if(not channelName):
+            print "channel not found"
+            return
+
+        prevVal = self.sensorStates.get(sensorId)
+        self.sensorStates[sensorId] = v
+        #print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v))
+        if(self.currentMode == GameModes.SINGLE_HIT):
+            if(v > self.TRIGGER_LEVEL and prevVal < self.TRIGGER_LEVEL):
+                self.singleHit(channelName)
+        else:
+            if(v > self.TRIGGER_LEVEL):
+                self.enableChannel(channelName)
+            else:
+                self.disableChannel(channelName)
+
+    def checkTime(self):
+        lastStep = None
+        for step in conf.Controller['steps']:
+            startHour = int(step.get('startTime').split(":")[0])
+            startMinute = int(step.get('startTime').split(":")[1])
+            startSecond = int(step.get('startTime').split(":")[2])
+            startDate = datetime.datetime.now().replace(hour=startHour, minute=startMinute, second=startSecond, microsecond=0)
+            print("now", datetime.datetime.now())
+            if(startDate < datetime.datetime.now()):
+                lastStep = step
+
+        if(lastStep is not None and lastStep != self.currentStep):
+            print("automatic step switch", lastStep)
+            self.loadStep(lastStep)
+
+        try:
+            threading.Timer(15, self.checkTime).start()
+        except (KeyboardInterrupt, SystemExit):
+            cleanup_stop_thread()
+            sys.exit()
+
+    def loadStep(self, step):
+        if(step == self.currentStep):
+            return
+        self.currentStep = step
+        soundSetPath = step.get('set')
+        self.switchSetIndex(conf.SoundSets.keys().index(soundSetPath))
+        if(step.get('pdCommand')):
+            self.sendToPd(step.get('pdCommand'))
+    
 
     def createWidgets(self):
         topFrame = Frame(self)
@@ -100,13 +176,14 @@ class Application(Frame):
         bottomFrame = Frame(self)
         bottomFrame.pack( side = BOTTOM )
 
-        self.modeButton = Button(topFrame, command=self.switchMode)
+        self.modeButton = Button(topFrame)
         self.modeButton.pack( side = LEFT)
-        self.updateModeButton()
 
-        self.setIndexButton = Button(topFrame, command=self.switchSetIndex)
+        self.setIndexButton = Button(topFrame, command=lambda :self.switchSetIndex(self.setIndex+1))
         self.setIndexButton.pack( side = LEFT)
-        self.updateSetIndexButton()
+
+        self.stepButton = Button(topFrame)
+        self.stepButton.pack( side = LEFT)
 
         cols = [1, 2, 3, 4, 5]
         rows = ["A", "B", "C", "D", "E"]
@@ -118,51 +195,8 @@ class Application(Frame):
                 button.grid(row=r, column=c)
                 self.buttons[channelName] = button
                 
-        self.loadButton = Button(topFrame, text="Load", command=self.load)
-        self.loadButton.pack( side = LEFT)
-        #self.loadButton.grid(row=5, column=0, columnspan=2)
-
-        #self.playAllButton = Button(topFrame, text="PlayAll", command=self.playAll)
-        #self.playAllButton.pack( side = LEFT)
-        #self.playAllButton.grid(row=5, column=2, columnspan=2)
-
-    def enableChannel(self, channelName):
-        self.sendToPd(channelName + " volume 1")
-        self.playStates[channelName] = True
-        self.buttons[channelName].configure(highlightbackground='black')
-    
-    def disableChannel(self, channelName):
-        self.sendToPd(channelName + " volume 0")
-        self.playStates[channelName] = True
-        self.buttons[channelName].configure(highlightbackground='white')
-
-    def onMessage(self, client, userdata, message):
-        '''
-        Callback for MQTT messages
-        {"k": "XXX", "v": 100}
-        '''
-        val = json.loads(str(message.payload.decode("utf-8")))   
-        v = 0.0
-        channelName = ""
-        try:
-            sensorId = val['k']
-            v = int(val['v'])
-        except:
-            print('Could not digest ' + str(message.payload.decode("utf-8")))
-
-        channelName = conf.SensorNames[sensorId]
-        prevVal = self.sensorStates.get(sensorId)
-        self.sensorStates[sensorId] = v
-        print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v))
-        if(self.currentMode == GameModes.SINGLE_HIT):
-            if(v > self.TRIGGER_LEVEL and prevVal < self.TRIGGER_LEVEL):
-                self.singleHit(channelName)
-        else:
-            if(v > self.TRIGGER_LEVEL):
-                self.enableChannel(channelName)
-            else:
-                self.disableChannel(channelName)
-
+        #self.loadButton = Button(topFrame, text="Load", command=self.load)
+        #self.loadButton.pack( side = LEFT)
 
     def __init__(self, master=None):
         Frame.__init__(self, master)
@@ -182,7 +216,8 @@ class Application(Frame):
         # setup callback
         self.client.on_message=self.onMessage
         self.client.loop_start()
-        self.switchMode()
+        self.switchSetIndex(0)
+        self.checkTime()
 
 root = Tk()
 app = Application(master=root)
