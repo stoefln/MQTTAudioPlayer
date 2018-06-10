@@ -8,6 +8,18 @@ SystemSettings = {
     'pdSendPath': '/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend'
 }
 
+SoundSets = {
+    'SINGLE_HIT':[
+        {
+            'path': '../media/set1'
+        }
+    ],  
+    'LOOP':[
+        {
+            'path': '../media/loops1'
+        }
+    ]
+}
 SensorNames = {
     "A1": "A 1", "A2": "A 2", "A3": "A 3", "A4": "A 4", "A5" : "A 5",
     "B1": "B 1", "B2": "B 2", "B3": "B 3", "B4": "B 4", "B5" : "B 5",
