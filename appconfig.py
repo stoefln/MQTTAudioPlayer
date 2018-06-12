@@ -9,13 +9,36 @@ SystemSettings = {
 }
 
 SoundSets = {
-    '../media/set1': {
-        'mode': 'SINGLE_HIT'
+    '../media/clio-sounds': {
+        'mode': 'SINGLE_HIT',
+    },
+    '../media/clio-hang': {
+        'mode': 'SINGLE_HIT',
     },
     '../media/loops1': {
-        'mode': 'LOOP'
-    }
-    
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki1': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki2': {
+        'mode': 'LOOP',
+        'duration': '8000'
+    },
+    '../media/luki3': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki4': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki5': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
 }
 SensorNames = {
     "68:C6:3A:C3:04:5E": "A 1", "A2": "A 2", "A3": "A 3", "A4": "A 4", "A5" : "A 5",
@@ -30,7 +53,7 @@ Controller = {
             'startTime': '21:18:15',
             'mqttCommand': '',
             'pdCommand': '',
-            'set': '../media/set1'
+            'set': '../media/clio-sounds'
         },
         {
             'startTime': '21:18:25',
@@ -42,7 +65,9 @@ Controller = {
             'startTime': '21:42:00',
             'mqttCommand': '',
             'pdCommand': 'A 1 load ../media/set1/intro.wav, A 1 play, C 2 play, D 3 play',
-            'set': '../media/set1'
+            'set': '../media/clio-sounds',
+            'masterVolume': 0.8,
+
         }
     ]
 }

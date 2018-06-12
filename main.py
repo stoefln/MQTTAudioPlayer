@@ -34,7 +34,7 @@ class Application(Frame):
     currentStep = None
 
     def load(self):
-        print "loading sounds into PD.."
+        print("loading sounds into PD..")
         command = ""
         path = conf.SoundSets.keys()[self.setIndex]
         soundSet = conf.SoundSets[path]
@@ -79,7 +79,8 @@ class Application(Frame):
         if(self.currentMode == GameModes.SINGLE_HIT):
             self.sendToPd("loop stop, all volume 1")
         else:
-            self.sendToPd("loop start 60, all volume 0") 
+            duration = soundSet['duration']
+            self.sendToPd("loop start "+duration+", all volume 0") 
         print("New mode: "+self.currentMode)
         self.updateModeButton()
         self.updateSetIndexButton()
@@ -123,7 +124,7 @@ class Application(Frame):
 
         channelName = conf.SensorNames.get(sensorId)
         if(not channelName):
-            print "channel not found"
+            print("channel not found")
             return
 
         prevVal = self.sensorStates.get(sensorId)
