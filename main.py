@@ -10,6 +10,7 @@ from enum import Enum
 import threading
 from dateutil import parser
 import datetime
+import timer
 
 # ---------------------------------------------------
 # 3rd Party Libs (install with pip)
@@ -122,10 +123,12 @@ class Application(Frame):
         except:
             print('Could not digest ' + str(message.payload.decode("utf-8")))
 
+        activeMacAddressLabel["text"] = sensorId
         channelName = conf.SensorNames.get(sensorId)
         if(not channelName):
             print("channel not found")
             return
+        activeMacAddressLabel["text"] = activeMacAddressLabel["text"] + " "+channelName
 
         prevVal = self.sensorStates.get(sensorId)
         self.sensorStates[sensorId] = v
@@ -154,11 +157,6 @@ class Application(Frame):
             print("automatic step switch", lastStep)
             self.loadStep(lastStep)
 
-        try:
-            threading.Timer(15, self.checkTime).start()
-        except (KeyboardInterrupt, SystemExit):
-            cleanup_stop_thread()
-            sys.exit()
 
     def loadStep(self, step):
         if(step == self.currentStep):
@@ -185,6 +183,15 @@ class Application(Frame):
 
         self.stepButton = Button(topFrame)
         self.stepButton.pack( side = LEFT)
+
+        footerFrame = Frame(self)
+        footerFrame.pack( side = BOTTOM )
+
+        self.quitButton = Button(footerFrame, text='Quit',command=self.quit) # Use destroy instead of quit
+        self.quitButton.pack( side = LEFT)
+
+        #self.activeMacAddressLabel = Label(bottomFrame)
+        #self.activeMacAddressLabel.pack( side = LEFT)
 
         cols = [1, 2, 3, 4, 5]
         rows = ["A", "B", "C", "D", "E"]
@@ -218,9 +225,16 @@ class Application(Frame):
         self.client.on_message=self.onMessage
         self.client.loop_start()
         self.switchSetIndex(0)
-        self.checkTime()
+        # self.checkTime()
+        #self.checkTime()
+        self.scheduler = timer.Scheduler(5, self.checkTime)
+        self.scheduler.start()
+
+    def quit(self):
+        print("Terminating...")
+        self.scheduler.stop()
+        root.destroy()
 
 root = Tk()
 app = Application(master=root)
 app.mainloop()
-root.destroy()
