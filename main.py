@@ -1,4 +1,5 @@
 from Tkinter import *
+from ttk import Combobox
 import os
 import appconfig as conf
 import os.path
@@ -11,6 +12,7 @@ import threading
 from dateutil import parser
 import datetime
 import timer
+from pprint import pprint
 
 # ---------------------------------------------------
 # 3rd Party Libs (install with pip)
@@ -25,7 +27,7 @@ class GameModes(Enum):
     LOOP = "LOOP"
 
 class Application(Frame):
-    TRIGGER_LEVEL = 30
+    TRIGGER_LEVEL = 20
     scheduler = sched.scheduler(time.time, time.sleep)
     playStates = {}
     sensorStates = {}
@@ -109,38 +111,50 @@ class Application(Frame):
         self.buttons[channelName].configure(highlightbackground='white')
 
     def onMessage(self, client, userdata, message):
-        '''
-        Callback for MQTT messages
-        {"k": "XXX", "v": 100}
-        '''
-        print(str(message.payload.decode("utf-8")))
-        val = json.loads(str(message.payload.decode("utf-8")))   
-        v = 0.0
-        channelName = ""
-        try:
-            sensorId = val['k']
-            v = int(val['v'])
-        except:
-            print('Could not digest ' + str(message.payload.decode("utf-8")))
+        if(message.topic == "control"):
+            val = str(message.payload.decode("utf-8"))
+            if(val == "nextSet"):
+                self.switchSetIndex(self.setIndex + 1)
+            elif(val == "prevSet"):
+                self.switchSetIndex(self.setIndex - 1)
+            elif(val.startswith("pd:")):
+                self.sendToPd(val.split(":")[1])
 
-        activeMacAddressLabel["text"] = sensorId
-        channelName = conf.SensorNames.get(sensorId)
-        if(not channelName):
-            print("channel not found")
-            return
-        activeMacAddressLabel["text"] = activeMacAddressLabel["text"] + " "+channelName
+        elif(message.topic == "sensor"):
+            '''
+            Callback for MQTT messages
+            {"k": "XXX", "v": 100}
+            '''
+            #print(str(message.payload.decode("utf-8")))
+            val = json.loads(str(message.payload.decode("utf-8")))   
+            v = 0.0
+            channelName = ""
+            try:
+                sensorId = val['k']
+                v = int(val['v'])
+            except:
+                print('Could not digest ' + str(message.payload.decode("utf-8")))
+                return
+            
+            if(v > 50):
+                self.activeMacAddrLabel["text"] = sensorId
+            
+            channelName = conf.SensorNames.get(sensorId)
+            if(not channelName):
+                print("channel not found")
+                return
 
-        prevVal = self.sensorStates.get(sensorId)
-        self.sensorStates[sensorId] = v
-        #print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v))
-        if(self.currentMode == GameModes.SINGLE_HIT):
-            if(v > self.TRIGGER_LEVEL and prevVal < self.TRIGGER_LEVEL):
-                self.singleHit(channelName)
-        else:
-            if(v > self.TRIGGER_LEVEL):
-                self.enableChannel(channelName)
+            prevVal = self.sensorStates.get(sensorId)
+            self.sensorStates[sensorId] = v
+            #print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v))
+            if(self.currentMode == GameModes.SINGLE_HIT):
+                if(v > self.TRIGGER_LEVEL and prevVal < self.TRIGGER_LEVEL):
+                    self.singleHit(channelName)
             else:
-                self.disableChannel(channelName)
+                if(v > self.TRIGGER_LEVEL):
+                    self.enableChannel(channelName)
+                else:
+                    self.disableChannel(channelName)
 
     def checkTime(self):
         lastStep = None
@@ -149,13 +163,17 @@ class Application(Frame):
             startMinute = int(step.get('startTime').split(":")[1])
             startSecond = int(step.get('startTime').split(":")[2])
             startDate = datetime.datetime.now().replace(hour=startHour, minute=startMinute, second=startSecond, microsecond=0)
-            print("now", datetime.datetime.now())
+            #print("now", datetime.datetime.now())
             if(startDate < datetime.datetime.now()):
                 lastStep = step
 
         if(lastStep is not None and lastStep != self.currentStep):
-            print("automatic step switch", lastStep)
+            print("automatic step switch: ", lastStep)
             self.loadStep(lastStep)
+
+        info = "currentStep: "+str(self.currentStep)+"\n"
+        info += "currentMode: "+self.currentMode+"\n"
+        self.client.publish("info", "info: "+info, 0)
 
 
     def loadStep(self, step):
@@ -167,13 +185,18 @@ class Application(Frame):
         if(step.get('pdCommand')):
             self.sendToPd(step.get('pdCommand'))
     
+    def patchFirmware(self):
+        self.client.publish("sensorControl", "{\"command\": \"patch\"}", 0)
+
+    def copyMacToClipBoard(self):
+        root.clipboard_clear()
+        root.clipboard_append(self.activeMacAddrLabel['text'])
+        root.update()
 
     def createWidgets(self):
         topFrame = Frame(self)
         topFrame.pack( side = TOP)
 
-        bottomFrame = Frame(self)
-        bottomFrame.pack( side = BOTTOM )
 
         self.modeButton = Button(topFrame)
         self.modeButton.pack( side = LEFT)
@@ -187,8 +210,16 @@ class Application(Frame):
         footerFrame = Frame(self)
         footerFrame.pack( side = BOTTOM )
 
-        self.quitButton = Button(footerFrame, text='Quit',command=self.quit) # Use destroy instead of quit
-        self.quitButton.pack( side = LEFT)
+        bottomFrame = Frame(self)
+        bottomFrame.pack( side = BOTTOM )
+
+        #self.stepCombo = Combobox(footerFrame)
+        #self.stepCombo.pack(side = LEFT)
+        self.activeMacAddrLabel = Button(footerFrame, text='Last active mac',command=self.copyMacToClipBoard)
+        self.activeMacAddrLabel.pack(side = LEFT)
+
+        self.patchFirmwareButton = Button(footerFrame, text='Patch Firmware',command=self.patchFirmware)
+        self.patchFirmwareButton.pack( side = LEFT)
 
         #self.activeMacAddressLabel = Label(bottomFrame)
         #self.activeMacAddressLabel.pack( side = LEFT)
@@ -210,16 +241,16 @@ class Application(Frame):
         Frame.__init__(self, master)
         self.pack()
         self.createWidgets()
-        print("Initialising...")
+        print("Connecting to broker...")
         self.client = mqtt.Client(conf.brokerSettings['client'])
         self.client.connect(conf.brokerSettings['address'], conf.brokerSettings['port'])
-
+        print("connected!")
         # wait for MQTT connection
         # TODO: implement proper callback https://www.eclipse.org/paho/clients/python/docs/
         #       with error handling on failed connection
         time.sleep(0.5)
 
-        self.client.subscribe(conf.brokerSettings['topic'])
+        self.client.subscribe([(conf.brokerSettings['topic'], 0), ("control", 0)])
 
         # setup callback
         self.client.on_message=self.onMessage
@@ -237,4 +268,6 @@ class Application(Frame):
 
 root = Tk()
 app = Application(master=root)
+root.protocol("WM_DELETE_WINDOW", app.quit)
+
 app.mainloop()
