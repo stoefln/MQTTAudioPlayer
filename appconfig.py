@@ -26,27 +26,31 @@ SoundSets = {
         'mode': 'LOOP',
         'duration': '4000'
     },
-    # '../media/luki2': {
-    #     'mode': 'LOOP',
-    #     'duration': '8000'
-    # },
-    # '../media/luki3': {
-    #     'mode': 'LOOP',
-    #     'duration': '4000'
-    # },
-    # '../media/luki4': {
-    #     'mode': 'LOOP',
-    #     'duration': '4000'
-    # },
-    # '../media/luki5': {
-    #     'mode': 'LOOP',
-    #     'duration': '4000'
-    # },
+    '../media/luki2': {
+        'mode': 'LOOP',
+        'duration': '8000'
+    },
+    '../media/luki3': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki4': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/luki5': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    },
+    '../media/christian-thepiano': {
+        'mode': 'LOOP',
+        'duration': '4000'
+    }
 }
 SensorNames = {
     "68:C6:3A:C3:70:E5": "A 1", "38:2B:78:05:13:61": "A 2", "38:2B:78:03:CF:5D": "A 3", "68:C6:3A:C3:00:D0": "A 4", "68:C6:3A:C3:77:40" : "A 5",
     "68:C6:3A:C3:06:63": "B 1", "B2": "B 2", "B3": "B 3", "B4": "B 4", "B5" : "B 5",
-    "C1": "C 1", "C2": "C 2", "C3": "C 3", "C4": "C 4", "C5" : "C 5",
+    "68:C6:3A:C3:03:A3": "C 1", "C2": "C 2", "C3": "C 3", "C4": "C 4", "C5" : "C 5",
     "D1": "D 1", "D2": "D 2", "D3": "D 3", "D4": "D 4", "D5" : "D 5",
     "E1": "E 1", "E2": "E 2", "E3": "E 3", "E4": "E 4", "E5" : "E 5"
 }

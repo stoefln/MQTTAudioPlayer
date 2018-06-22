@@ -13,6 +13,7 @@ from dateutil import parser
 import datetime
 import timer
 from pprint import pprint
+from thread import start_new_thread
 
 # ---------------------------------------------------
 # 3rd Party Libs (install with pip)
@@ -27,7 +28,6 @@ class GameModes(Enum):
     LOOP = "LOOP"
 
 class Application(Frame):
-    TRIGGER_LEVEL = 20
     scheduler = sched.scheduler(time.time, time.sleep)
     playStates = {}
     sensorStates = {}
@@ -74,6 +74,7 @@ class Application(Frame):
         print("sending command to PD: "+command)
         os.system("echo '" + command + "' | "+conf.SystemSettings["pdSendPath"]+" 3000 localhost udp")
 
+
     def switchSetIndex(self, index):
         self.setIndex = (index) % len(conf.SoundSets.keys())
         soundSet = conf.SoundSets.get(conf.SoundSets.keys()[self.setIndex])
@@ -101,14 +102,12 @@ class Application(Frame):
             return
         self.sendToPd(channelName + " volume 1")
         self.playStates[channelName] = True
-        self.buttons[channelName].configure(highlightbackground='black')
     
     def disableChannel(self, channelName):
-        if(not self.playStates[channelName]):
+        if(not self.playStates.get(channelName)):
             return
         self.sendToPd(channelName + " volume 0")
         self.playStates[channelName] = False
-        self.buttons[channelName].configure(highlightbackground='white')
 
     def onMessage(self, client, userdata, message):
         if(message.topic == "control"):
@@ -126,35 +125,45 @@ class Application(Frame):
             {"k": "XXX", "v": 100}
             '''
             #print(str(message.payload.decode("utf-8")))
-            val = json.loads(str(message.payload.decode("utf-8")))   
-            v = 0.0
-            channelName = ""
-            try:
-                sensorId = val['k']
-                v = int(val['v'])
-            except:
-                print('Could not digest ' + str(message.payload.decode("utf-8")))
-                return
-            
-            if(v > 50):
-                self.activeMacAddrLabel["text"] = sensorId
-            
-            channelName = conf.SensorNames.get(sensorId)
-            if(not channelName):
-                print("channel not found")
-                return
+            start_new_thread(self.handleSensorData, (message,))
 
-            prevVal = self.sensorStates.get(sensorId)
-            self.sensorStates[sensorId] = v
-            #print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v))
-            if(self.currentMode == GameModes.SINGLE_HIT):
-                if(v > self.TRIGGER_LEVEL and prevVal < self.TRIGGER_LEVEL):
-                    self.singleHit(channelName)
+    def handleSensorData(self, message):
+        val = json.loads(str(message.payload.decode("utf-8")))   
+        v = 0.0
+        s = 0
+        channelName = ""
+        try:
+            sensorId = val['k']
+            v = int(val['v'])
+            s = int(val.get('s'))
+        except:
+            print('Could not digest ' + str(message.payload.decode("utf-8")))
+            return
+        
+        channelName = conf.SensorNames.get(sensorId)
+        if(not channelName):
+            print("channel for sensorId "+sensorId+" not found")
+            return
+
+        prevVal = self.sensorStates.get(sensorId)
+        self.sensorStates[sensorId] = v
+        print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v)+ " s:"+str(s))
+        if(self.currentMode == GameModes.SINGLE_HIT):
+            if(s == 1):
+                self.singleHit(channelName)
+                self.buttons[channelName].configure(highlightbackground='red')
             else:
-                if(v > self.TRIGGER_LEVEL):
-                    self.enableChannel(channelName)
-                else:
-                    self.disableChannel(channelName)
+                self.buttons[channelName].configure(highlightbackground='white')
+        else:
+            if(s == 1):
+                self.enableChannel(channelName)
+                self.buttons[channelName].configure(highlightbackground='black')
+            else:
+                self.disableChannel(channelName)
+                self.buttons[channelName].configure(highlightbackground='white')
+
+        if(s == 1):
+            self.activeMacAddrLabel["text"] = sensorId
 
     def checkTime(self):
         lastStep = None
