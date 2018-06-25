@@ -36,10 +36,8 @@ class Application(Frame):
     buttons = {}
     currentMode = GameModes.SINGLE_HIT
     currentStep = None
-    # the sensor value threshold which makes the sensors send an ON and OFF signal
-    sensorTriggerLevel = 200
-    # the brightness of the lights in the sensor
-    sensorBrightness = 200
+    
+    
 
     def load(self):
         print("loading sounds into PD..")
@@ -116,8 +114,8 @@ class Application(Frame):
         self.playStates[channelName] = False
 
     def onMessage(self, client, userdata, message):
+        val = str(message.payload.decode("utf-8"))
         if(message.topic == "control"):
-            val = str(message.payload.decode("utf-8"))
             if(val == "nextSet"):
                 self.switchNextSet()
             elif(val == "prevSet"):
@@ -131,15 +129,30 @@ class Application(Frame):
             '''
             #print(str(message.payload.decode("utf-8")))
             start_new_thread(self.handleSensorData, (message,))
+        elif(message.topic.startswith("sensorControl")):
+            if(message.topic.find("set/brightness")):
+                self.conf["SystemSettings"]["sensorBrightness"] = int(val)
+            elif(message.topic.find("set/triggerLevel")):
+                self.conf["SystemSettings"]["sensorTriggerLevel"] = int(val)
+
         elif(message.topic == "status"):
-            val = json.loads(str(message.payload.decode("utf-8")))   
-            status = val.get("status")
-            mac = val.get('k')
+            obj = json.loads(val)   
+            status = obj.get("status")
+            mac = obj.get('k')
             print("status: "+mac+" status: "+status)
             if(status == "connected"):
                 sensorTopic = "sensorControl"+mac
-                self.client.publish(sensorTopic, "{\"command\": \"setTriggerLevel\", \"val\": "+str(self.sensorTriggerLevel)+"}", 1)
-                self.client.publish(sensorTopic, "{\"command\": \"setBrightness\", \"val\": "+str(self.sensorBrightness)+"}", 1)
+                self.client.publish(sensorTopic, "{\"command\": \"setTriggerLevel\", \"val\": "+str(self.getSensorTriggerLevel())+"}", 1)
+                self.client.publish(sensorTopic, "{\"command\": \"setBrightness\", \"val\": "+str(self.getSensorBrightness())+"}", 1)
+
+
+    def getSensorBrightness(self): # the brightness of the lights in the sensor
+        if(self.currentStep.get("sensorBrightness")):
+            return self.currentStep.get("sensorBrightness")
+        return self.conf["SystemSettings"]["sensorBrightness"]
+
+    def getSensorTriggerLevel(self): # the sensor value threshold which makes the sensors send an ON and OFF signal
+        return self.conf["SystemSettings"]["sensorTriggerLevel"]
 
     def handleSensorData(self, message):
         val = json.loads(str(message.payload.decode("utf-8")))   
@@ -202,13 +215,12 @@ class Application(Frame):
             json.dump(self.conf, confFile, indent=4, sort_keys=False)
 
     def switchStep(self, stepId):
-        if(stepId == self.stepCombo.get()):
-            return
 
         self.client.publish("info/step", stepId, 0)
         self.stepCombo.set(stepId)
         self.currentStep = self.conf["Scheduler"]["steps"][stepId]
-
+        print("switch step: ")
+        pprint(self.currentStep)
         if(self.currentStep.get('pdCommand')):
             self.sendToPd(self.currentStep.get('pdCommand'))
 
@@ -252,7 +264,7 @@ class Application(Frame):
         root.update()
 
     def onStepComboChanged(self, event):
-        pprint(self.stepCombo.get())
+        print(self.stepCombo.get())
         self.switchStep(self.stepCombo.get())
 
     def onSetComboChanged(self, event):
@@ -263,8 +275,9 @@ class Application(Frame):
         topFrame = Frame(self)
         topFrame.pack( side = TOP)
 
-
-        self.stepCombo = Combobox(topFrame, values=self.conf["Scheduler"]["steps"].keys(), state="readonly")
+        stepKeys = self.conf["Scheduler"]["steps"].keys()
+        stepKeys.sort()
+        self.stepCombo = Combobox(topFrame, values=stepKeys, state="readonly")
         self.stepCombo.pack(side = LEFT)
         self.stepCombo.bind("<<ComboboxSelected>>", self.onStepComboChanged)
 
@@ -297,9 +310,7 @@ class Application(Frame):
                 button = Button(bottomFrame, text=channelName, command=lambda sn=channelName:self.buttonPress(sn))
                 button.grid(row=r, column=c)
                 self.buttons[channelName] = button
-                
-        #self.loadButton = Button(topFrame, text="Load", command=self.load)
-        #self.loadButton.pack( side = LEFT)
+
 
     def __init__(self, master=None):
         Frame.__init__(self, master)
@@ -317,8 +328,8 @@ class Application(Frame):
         # TODO: implement proper callback https://www.eclipse.org/paho/clients/python/docs/
         #       with error handling on failed connection
         time.sleep(0.5)
-        # sensor: updates from the sensors; control: topic for controlling this program; status: topic where status updates are posted (mostly sensors when the join the network)
-        self.client.subscribe([("sensor", 0), ("control", 0), ("status", 0), ])
+        # sensor: updates from the sensors; control: topic for controlling this program; status: topic where status updates are posted (mostly sensors when the join the network); sensorControl: listening to the control messages of the sensors
+        self.client.subscribe([("sensor", 0), ("control", 0), ("status", 0), ("sensorControl/#", 0)])
 
 
         # setup callback
@@ -328,7 +339,7 @@ class Application(Frame):
         self.switchSet(self.conf["SoundSets"].keys()[0])
         # self.checkTime()
         #self.checkTime()
-        self.scheduler = timer.Scheduler(5, self.checkTime)
+        self.scheduler = timer.Scheduler(30, self.checkTime)
         self.scheduler.start()
 
 

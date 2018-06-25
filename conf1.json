@@ -2,7 +2,7 @@
     "brokerSettings": {
         "client": "Raspy", 
         "port": 1883, 
-        "address": "10.0.1.140"
+        "address": "192.168.0.73"
     }, 
     "SensorNames": {
         "C4": "C 4", 
@@ -33,7 +33,9 @@
     }, 
     "SystemSettings": {
         "pdSendPath": "/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend", 
-        "otaUpdateUrl": "http://192.168.0.164:8000/Firmware/moon_melon.bin"
+        "otaUpdateUrl": "http://192.168.0.164:8000/Firmware/moon_melon.bin", 
+        "sensorTriggerLevel": 200, 
+        "sensorBrightness": 200
     }, 
     "Scheduler": {
         "steps": {
@@ -43,21 +45,35 @@
                 "masterVolume": 0.8, 
                 "pdCommand": ""
             }, 
+            "08:00:00": {
+                "set": "../media/clio-sounds", 
+                "masterVolume": 0.8, 
+                "sensorBrightness": 0
+            }, 
+            "21:18:25": {
+                "mqttCommand": "", 
+                "set": "../media/loops1", 
+                "masterVolume": 1, 
+                "pdCommand": ""
+            }, 
+            "23:59:00": {
+                "set": "../media/clio-hang", 
+                "masterVolume": 0.3, 
+                "pdCommand": ""
+            }, 
             "21:42:00": {
                 "mqttCommand": "", 
                 "set": "../media/clio-sounds", 
                 "masterVolume": 0.8, 
                 "pdCommand": "A 1 load ../media/set1/intro.wav, A 1 play, C 2 play, D 3 play"
             }, 
+            "18:00:00": {
+                "set": "../media/clio-sounds", 
+                "sensorBrightness": 255
+            }, 
             "21:18:15": {
                 "mqttCommand": "", 
                 "set": "../media/clio-sounds", 
-                "masterVolume": 1, 
-                "pdCommand": ""
-            }, 
-            "21:18:25": {
-                "mqttCommand": "", 
-                "set": "../media/loops1", 
                 "masterVolume": 1, 
                 "pdCommand": ""
             }
