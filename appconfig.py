@@ -1,11 +1,12 @@
 brokerSettings = {
     'address'   : '192.168.0.73',
     'port'      : 1883,
-    'topic'     : 'sensor', 
-    'client'    : 'Raspy'}
+    'client'    : 'Raspy'
+}
 
 SystemSettings = {
-    'pdSendPath': '/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend'
+    'pdSendPath': '/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend',
+    'otaUpdateUrl': 'http://192.168.0.164:8000/Firmware/moon_melon.bin',
 }
 
 SoundSets = {
@@ -34,18 +35,28 @@ SoundSets = {
         'mode': 'LOOP',
         'duration': '4000'
     },
-    '../media/luki4': {
+    '../media/luki-ambient': {
         'mode': 'LOOP',
         'duration': '4000'
     },
-    '../media/luki5': {
+    '../media/luki-mixed': {
+        'mode': 'SINGLE_HIT',
+    },
+    '../media/luki-sequenced': {
         'mode': 'LOOP',
         'duration': '4000'
+    },
+
+    '../media/christian-thebeat': {
+        'mode': 'LOOP',
+        'duration': '14328'
     },
     '../media/christian-thepiano': {
-        'mode': 'LOOP',
-        'duration': '4000'
-    }
+        'mode': 'SINGLE_HIT',
+    },
+    '../media/christian-sinitus': {
+        'mode': 'SINGLE_HIT',
+    },
 }
 SensorNames = {
     "68:C6:3A:C3:70:E5": "A 1", "38:2B:78:05:13:61": "A 2", "38:2B:78:03:CF:5D": "A 3", "68:C6:3A:C3:00:D0": "A 4", "68:C6:3A:C3:77:40" : "A 5",

@@ -1,7 +1,6 @@
 from Tkinter import *
 from ttk import Combobox
 import os
-import appconfig as conf
 import os.path
 import time
 import json
@@ -28,29 +27,59 @@ class GameModes(Enum):
     LOOP = "LOOP"
 
 class Application(Frame):
+    cols = [1, 2, 3, 4, 5]
+    rows = ["A", "B", "C", "D", "E"]
+    
     scheduler = sched.scheduler(time.time, time.sleep)
     playStates = {}
     sensorStates = {}
     buttons = {}
     currentMode = GameModes.SINGLE_HIT
-    setIndex = 0
     currentStep = None
+    # the sensor value threshold which makes the sensors send an ON and OFF signal
+    sensorTriggerLevel = 200
+    # the brightness of the lights in the sensor
+    sensorBrightness = 200
 
     def load(self):
         print("loading sounds into PD..")
         command = ""
-        path = conf.SoundSets.keys()[self.setIndex]
-        soundSet = conf.SoundSets[path]
+        path = self.setCombo.get()
+        soundSet = self.conf["SoundSets"][path]
 
-        for k in conf.SensorNames:
-            channelName = conf.SensorNames[k]
-            command += channelName + " load "+path+"/" + channelName.replace(" ", "") + ".wav,"
-            self.playStates[channelName] = False
-            self.enableButton(channelName, False)
+        sensorsPerRow = 5.0
+        gapsPerRow = sensorsPerRow - 1
+        balanceSpread = 1.0 / gapsPerRow # 0.25
+        col = 0.0
+        row = 0.0
 
+        for r in range(len(self.rows)):
+            for c in range(len(self.cols)):
+                channelName = str(self.rows[r])+" "+str(self.cols[c])
+                command += channelName + " load "+path+"/" + channelName.replace(" ", "") + ".wav,"
+                backFrontMultiplyer = (gapsPerRow - r) / gapsPerRow # row0: 1, row1: 0.75, row3: 0.5, row4: 0.25, row5: 0
+                v1 = (1 - (balanceSpread * c)) *  backFrontMultiplyer
+                v2 = (balanceSpread * c) * backFrontMultiplyer  
+                v3 = (1 - (balanceSpread * c)) * (1 - backFrontMultiplyer)
+                v4 = (balanceSpread * c) * (1 - backFrontMultiplyer)
+                command += channelName + " panorama "+str(v1)+" "+str(v2)+" "+str(v3)+" "+str(v4)+","
+                self.playStates[channelName] = False
+                self.enableButton(channelName, False)
+
+        command += "all volume "+str(self.getMasterVolume())+","
         self.sendToPd(command)
             
-    
+    def getMasterVolume(self):
+        if(self.currentStep is None):
+            return 1
+        else:
+            return self.currentStep["masterVolume"]
+
+    def getChannelVolume(self, channelName):
+        v = self.getMasterVolume()
+        # todo: implement channel volume
+        return v
+
     def singleHit(self, channelName):
         self.sendToPd(channelName+" play")
         
@@ -60,7 +89,7 @@ class Application(Frame):
         else:
             self.playStates[channelName] = not self.playStates.get(channelName)
             if(self.playStates.get(channelName)):
-                self.sendToPd(channelName+" volume 1")
+                self.sendToPd(channelName+" volume "+str(self.getChannelVolume(channelName)))
             else:
                 self.sendToPd(channelName+" volume 0")
         
@@ -72,30 +101,7 @@ class Application(Frame):
 
     def sendToPd(self, command):
         print("sending command to PD: "+command)
-        os.system("echo '" + command + "' | "+conf.SystemSettings["pdSendPath"]+" 3000 localhost udp")
-
-
-    def switchSetIndex(self, index):
-        self.setIndex = (index) % len(conf.SoundSets.keys())
-        soundSet = conf.SoundSets.get(conf.SoundSets.keys()[self.setIndex])
-        self.currentMode = GameModes.SINGLE_HIT if soundSet['mode'] == 'SINGLE_HIT' else GameModes.LOOP
-        print("New setIndex: "+str(self.setIndex))
-        if(self.currentMode == GameModes.SINGLE_HIT):
-            self.sendToPd("loop stop, all volume 1")
-        else:
-            duration = soundSet['duration']
-            self.sendToPd("loop start "+duration+", all volume 0") 
-        print("New mode: "+self.currentMode)
-        self.updateModeButton()
-        self.updateSetIndexButton()
-        self.load()
-        
-    def updateSetIndexButton(self):
-        self.setIndexButton["text"] = "Set: "+conf.SoundSets.keys()[self.setIndex]
-    
-    def updateModeButton(self):
-        self.modeButton["text"] = "Mode: "+self.currentMode
-
+        os.system("echo '" + command + "' | "+self.conf["SystemSettings"]["pdSendPath"]+" 3000 localhost udp")
 
     def enableChannel(self, channelName):
         if(self.playStates[channelName]):
@@ -113,12 +119,11 @@ class Application(Frame):
         if(message.topic == "control"):
             val = str(message.payload.decode("utf-8"))
             if(val == "nextSet"):
-                self.switchSetIndex(self.setIndex + 1)
+                self.switchNextSet()
             elif(val == "prevSet"):
-                self.switchSetIndex(self.setIndex - 1)
+                self.switchPrevSet()
             elif(val.startswith("pd:")):
                 self.sendToPd(val.split(":")[1])
-
         elif(message.topic == "sensor"):
             '''
             Callback for MQTT messages
@@ -126,6 +131,15 @@ class Application(Frame):
             '''
             #print(str(message.payload.decode("utf-8")))
             start_new_thread(self.handleSensorData, (message,))
+        elif(message.topic == "status"):
+            val = json.loads(str(message.payload.decode("utf-8")))   
+            status = val.get("status")
+            mac = val.get('k')
+            print("status: "+mac+" status: "+status)
+            if(status == "connected"):
+                sensorTopic = "sensorControl"+mac
+                self.client.publish(sensorTopic, "{\"command\": \"setTriggerLevel\", \"val\": "+str(self.sensorTriggerLevel)+"}", 1)
+                self.client.publish(sensorTopic, "{\"command\": \"setBrightness\", \"val\": "+str(self.sensorBrightness)+"}", 1)
 
     def handleSensorData(self, message):
         val = json.loads(str(message.payload.decode("utf-8")))   
@@ -140,7 +154,7 @@ class Application(Frame):
             print('Could not digest ' + str(message.payload.decode("utf-8")))
             return
         
-        channelName = conf.SensorNames.get(sensorId)
+        channelName = self.conf["SensorNames"].get(sensorId)
         if(not channelName):
             print("channel for sensorId "+sensorId+" not found")
             return
@@ -167,54 +181,99 @@ class Application(Frame):
 
     def checkTime(self):
         lastStep = None
-        for step in conf.Controller['steps']:
-            startHour = int(step.get('startTime').split(":")[0])
-            startMinute = int(step.get('startTime').split(":")[1])
-            startSecond = int(step.get('startTime').split(":")[2])
+        for step in self.conf["Scheduler"]['steps'].keys():
+            startHour = int(step.split(":")[0])
+            startMinute = int(step.split(":")[1])
+            startSecond = int(step.split(":")[2])
             startDate = datetime.datetime.now().replace(hour=startHour, minute=startMinute, second=startSecond, microsecond=0)
             #print("now", datetime.datetime.now())
             if(startDate < datetime.datetime.now()):
                 lastStep = step
 
-        if(lastStep is not None and lastStep != self.currentStep):
+        if(lastStep is not None and lastStep != self.stepCombo.get()):
             print("automatic step switch: ", lastStep)
-            self.loadStep(lastStep)
+            self.switchStep(lastStep)
 
-        info = "currentStep: "+str(self.currentStep)+"\n"
+        info = "currentStep: "+self.stepCombo.get()+"\n"
         info += "currentMode: "+self.currentMode+"\n"
         self.client.publish("info", "info: "+info, 0)
 
+        with open("conf1.json", "w") as confFile:
+            json.dump(self.conf, confFile, indent=4, sort_keys=False)
 
-    def loadStep(self, step):
-        if(step == self.currentStep):
+    def switchStep(self, stepId):
+        if(stepId == self.stepCombo.get()):
             return
-        self.currentStep = step
-        soundSetPath = step.get('set')
-        self.switchSetIndex(conf.SoundSets.keys().index(soundSetPath))
-        if(step.get('pdCommand')):
-            self.sendToPd(step.get('pdCommand'))
-    
+
+        self.client.publish("info/step", stepId, 0)
+        self.stepCombo.set(stepId)
+        self.currentStep = self.conf["Scheduler"]["steps"][stepId]
+
+        if(self.currentStep.get('pdCommand')):
+            self.sendToPd(self.currentStep.get('pdCommand'))
+
+        self.switchSet(self.currentStep.get("set"))
+
+    def switchNextSet(self):
+        currentSet = self.setCombo.get()
+        nextIndex = (self.conf["SoundSets"].keys().index(currentSet) + 1) % len(self.conf["SoundSets"].keys())
+        nextSetPath = self.conf["SoundSets"].keys()[nextIndex]
+        self.switchSet(nextSetPath)
+
+    def switchPrevSet(self):
+        currentSet = self.setCombo.get()
+        prevIndex = (self.conf["SoundSets"].keys().index(currentSet) - 1) % len(self.conf["SoundSets"].keys())
+        prevSetPath = self.conf["SoundSets"].keys()[prevIndex]
+        self.switchSet(prevSetPath)
+
+    def switchSet(self, path):
+        soundSet = self.conf["SoundSets"].get(path)
+        self.setCombo.set(path)
+
+        self.currentMode = GameModes.SINGLE_HIT if soundSet['mode'] == 'SINGLE_HIT' else GameModes.LOOP
+
+        if(self.currentMode == GameModes.SINGLE_HIT):
+            self.sendToPd("loop stop, all volume "+str(self.getMasterVolume()))
+        else:
+            duration = soundSet['duration']
+            self.sendToPd("loop start "+duration+", all volume 0") 
+
+        print("New mode: "+self.currentMode)
+        self.modeButton["text"] = "Mode: "+self.currentMode
+        self.load()
+        self.client.publish("info/set", path, 0)
+      
     def patchFirmware(self):
-        self.client.publish("sensorControl", "{\"command\": \"patch\"}", 0)
+        self.client.publish("sensorControl/patch", self.conf["SystemSettings"]["otaUpdateUrl"], 1)
 
     def copyMacToClipBoard(self):
         root.clipboard_clear()
         root.clipboard_append(self.activeMacAddrLabel['text'])
         root.update()
 
+    def onStepComboChanged(self, event):
+        pprint(self.stepCombo.get())
+        self.switchStep(self.stepCombo.get())
+
+    def onSetComboChanged(self, event):
+        pprint(self.setCombo.get())
+        self.switchSet(self.setCombo.get())
+
     def createWidgets(self):
         topFrame = Frame(self)
         topFrame.pack( side = TOP)
 
 
+        self.stepCombo = Combobox(topFrame, values=self.conf["Scheduler"]["steps"].keys(), state="readonly")
+        self.stepCombo.pack(side = LEFT)
+        self.stepCombo.bind("<<ComboboxSelected>>", self.onStepComboChanged)
+
+        self.setCombo = Combobox(topFrame, values=self.conf["SoundSets"].keys(), state="readonly")
+        self.setCombo.pack(side = LEFT)
+        self.setCombo.bind("<<ComboboxSelected>>", self.onSetComboChanged)
+
         self.modeButton = Button(topFrame)
         self.modeButton.pack( side = LEFT)
-
-        self.setIndexButton = Button(topFrame, command=lambda :self.switchSetIndex(self.setIndex+1))
-        self.setIndexButton.pack( side = LEFT)
-
-        self.stepButton = Button(topFrame)
-        self.stepButton.pack( side = LEFT)
 
         footerFrame = Frame(self)
         footerFrame.pack( side = BOTTOM )
@@ -222,8 +281,7 @@ class Application(Frame):
         bottomFrame = Frame(self)
         bottomFrame.pack( side = BOTTOM )
 
-        #self.stepCombo = Combobox(footerFrame)
-        #self.stepCombo.pack(side = LEFT)
+
         self.activeMacAddrLabel = Button(footerFrame, text='Last active mac',command=self.copyMacToClipBoard)
         self.activeMacAddrLabel.pack(side = LEFT)
 
@@ -233,12 +291,9 @@ class Application(Frame):
         #self.activeMacAddressLabel = Label(bottomFrame)
         #self.activeMacAddressLabel.pack( side = LEFT)
 
-        cols = [1, 2, 3, 4, 5]
-        rows = ["A", "B", "C", "D", "E"]
-        
-        for c in range(len(cols)):
-            for r in range(len(rows)):
-                channelName = str(rows[r])+" "+str(cols[c])
+        for c in range(len(self.cols)):
+            for r in range(len(self.rows)):
+                channelName = str(self.rows[r])+" "+str(self.cols[c])
                 button = Button(bottomFrame, text=channelName, command=lambda sn=channelName:self.buttonPress(sn))
                 button.grid(row=r, column=c)
                 self.buttons[channelName] = button
@@ -248,27 +303,34 @@ class Application(Frame):
 
     def __init__(self, master=None):
         Frame.__init__(self, master)
+
+        with open('conf.json') as f:
+            self.conf = json.load(f)
+
         self.pack()
         self.createWidgets()
         print("Connecting to broker...")
-        self.client = mqtt.Client(conf.brokerSettings['client'])
-        self.client.connect(conf.brokerSettings['address'], conf.brokerSettings['port'])
+        self.client = mqtt.Client(self.conf["brokerSettings"]['client'])
+        self.client.connect(self.conf["brokerSettings"]['address'], self.conf["brokerSettings"]['port'])
         print("connected!")
         # wait for MQTT connection
         # TODO: implement proper callback https://www.eclipse.org/paho/clients/python/docs/
         #       with error handling on failed connection
         time.sleep(0.5)
+        # sensor: updates from the sensors; control: topic for controlling this program; status: topic where status updates are posted (mostly sensors when the join the network)
+        self.client.subscribe([("sensor", 0), ("control", 0), ("status", 0), ])
 
-        self.client.subscribe([(conf.brokerSettings['topic'], 0), ("control", 0)])
 
         # setup callback
         self.client.on_message=self.onMessage
         self.client.loop_start()
-        self.switchSetIndex(0)
+        #self.switchSetIndex(0)
+        self.switchSet(self.conf["SoundSets"].keys()[0])
         # self.checkTime()
         #self.checkTime()
         self.scheduler = timer.Scheduler(5, self.checkTime)
         self.scheduler.start()
+
 
     def quit(self):
         print("Terminating...")

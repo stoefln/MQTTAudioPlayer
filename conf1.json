@@ -1,0 +1,114 @@
+{
+    "brokerSettings": {
+        "client": "Raspy", 
+        "port": 1883, 
+        "address": "10.0.1.140"
+    }, 
+    "SensorNames": {
+        "C4": "C 4", 
+        "68:C6:3A:C3:06:63": "B 1", 
+        "38:2B:78:05:13:61": "A 2", 
+        "C3": "C 3", 
+        "C2": "C 2", 
+        "E1": "E 1", 
+        "C5": "C 5", 
+        "E2": "E 2", 
+        "38:2B:78:03:CF:5D": "A 3", 
+        "68:C6:3A:C3:70:E5": "A 1", 
+        "E5": "E 5", 
+        "68:C6:3A:C3:03:A3": "C 1", 
+        "E4": "E 4", 
+        "E3": "E 3", 
+        "68:C6:3A:C3:00:D0": "A 4", 
+        "B4": "B 4", 
+        "B5": "B 5", 
+        "68:C6:3A:C3:77:40": "A 5", 
+        "B2": "B 2", 
+        "B3": "B 3", 
+        "D4": "D 4", 
+        "D5": "D 5", 
+        "D2": "D 2", 
+        "D3": "D 3", 
+        "D1": "D 1"
+    }, 
+    "SystemSettings": {
+        "pdSendPath": "/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend", 
+        "otaUpdateUrl": "http://192.168.0.164:8000/Firmware/moon_melon.bin"
+    }, 
+    "Scheduler": {
+        "steps": {
+            "14:59:30": {
+                "mqttCommand": "", 
+                "set": "../media/clio-sounds", 
+                "masterVolume": 0.8, 
+                "pdCommand": ""
+            }, 
+            "21:42:00": {
+                "mqttCommand": "", 
+                "set": "../media/clio-sounds", 
+                "masterVolume": 0.8, 
+                "pdCommand": "A 1 load ../media/set1/intro.wav, A 1 play, C 2 play, D 3 play"
+            }, 
+            "21:18:15": {
+                "mqttCommand": "", 
+                "set": "../media/clio-sounds", 
+                "masterVolume": 1, 
+                "pdCommand": ""
+            }, 
+            "21:18:25": {
+                "mqttCommand": "", 
+                "set": "../media/loops1", 
+                "masterVolume": 1, 
+                "pdCommand": ""
+            }
+        }
+    }, 
+    "SoundSets": {
+        "../media/loops1": {
+            "duration": "4000", 
+            "mode": "LOOP"
+        }, 
+        "../media/luki1": {
+            "duration": "4000", 
+            "mode": "LOOP"
+        }, 
+        "../media/christian-thebeat": {
+            "duration": "14328", 
+            "mode": "LOOP"
+        }, 
+        "../media/luki3": {
+            "duration": "4000", 
+            "mode": "LOOP"
+        }, 
+        "../media/luki2": {
+            "duration": "8000", 
+            "mode": "LOOP"
+        }, 
+        "../media/luki-sequenced": {
+            "duration": "4000", 
+            "mode": "LOOP"
+        }, 
+        "../media/christian-thepiano": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/clio-sounds": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/clio-hang": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/clio-giusti": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/luki-mixed": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/christian-sinitus": {
+            "mode": "SINGLE_HIT"
+        }, 
+        "../media/luki-ambient": {
+            "duration": "4000", 
+            "mode": "LOOP"
+        }
+    }
+}
