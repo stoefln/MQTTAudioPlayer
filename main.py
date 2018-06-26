@@ -17,9 +17,7 @@ from thread import start_new_thread
 # ---------------------------------------------------
 # 3rd Party Libs (install with pip)
 # pip install enum
-# pip install numpy
 # pip install paho-mqtt
-import numpy 
 import paho.mqtt.client as mqtt 
 
 class GameModes(Enum):
