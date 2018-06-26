@@ -1,8 +1,9 @@
 {
     "brokerSettings": {
+        "address1": "192.168.0.73", 
         "client": "Raspy", 
         "port": 1883, 
-        "address": "192.168.0.73"
+        "address": "10.0.1.140"
     }, 
     "SensorNames": {
         "C4": "C 4", 
@@ -64,7 +65,7 @@
             "21:42:00": {
                 "mqttCommand": "", 
                 "set": "../media/clio-sounds", 
-                "masterVolume": 0.8, 
+                "masterVolume": 1, 
                 "pdCommand": "A 1 load ../media/set1/intro.wav, A 1 play, C 2 play, D 3 play"
             }, 
             "18:00:00": {
@@ -82,6 +83,9 @@
     "SoundSets": {
         "../media/loops1": {
             "duration": "4000", 
+            "C 3": {
+                "volume": 0.6000000000000001
+            }, 
             "mode": "LOOP"
         }, 
         "../media/luki1": {
@@ -108,6 +112,15 @@
             "mode": "SINGLE_HIT"
         }, 
         "../media/clio-sounds": {
+            "A 2": {
+                "volume": 0.40000000000000013
+            }, 
+            "A 3": {
+                "volume": 0.5000000000000001
+            }, 
+            "A 1": {
+                "volume": 0.3
+            }, 
             "mode": "SINGLE_HIT"
         }, 
         "../media/clio-hang": {

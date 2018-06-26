@@ -32,10 +32,9 @@ class Application(Frame):
     playStates = {}
     sensorStates = {}
     buttons = {}
-    currentMode = GameModes.SINGLE_HIT
+    currentPlayMode = GameModes.SINGLE_HIT
     currentStep = None
-    
-    
+    selectedChannelName = None
 
     def load(self):
         print("loading sounds into PD..")
@@ -59,10 +58,10 @@ class Application(Frame):
                 v3 = (1 - (balanceSpread * c)) * (1 - backFrontMultiplyer)
                 v4 = (balanceSpread * c) * (1 - backFrontMultiplyer)
                 command += channelName + " panorama "+str(v1)+" "+str(v2)+" "+str(v3)+" "+str(v4)+","
+                command += channelName + " volume "+str(self.getChannelVolume(channelName, True))+","
                 self.playStates[channelName] = False
                 self.enableButton(channelName, False)
 
-        command += "all volume "+str(self.getMasterVolume())+","
         self.sendToPd(command)
             
     def getMasterVolume(self):
@@ -71,25 +70,43 @@ class Application(Frame):
         else:
             return self.currentStep["masterVolume"]
 
-    def getChannelVolume(self, channelName):
-        v = self.getMasterVolume()
-        # todo: implement channel volume
+    def getChannelVolume(self, channelName, includeMasterVolume):
+        channelConfig = self.currentSet.get(channelName)
+        if(channelConfig):
+            v = channelConfig.get("volume")
+        else:
+            v = 1
+        if(includeMasterVolume):
+            v = v * self.getMasterVolume()
+
         return v
 
     def singleHit(self, channelName):
         self.sendToPd(channelName+" play")
         
     def buttonPress(self, channelName):
-        if(self.currentMode == GameModes.SINGLE_HIT):
-            self.singleHit(channelName)
-        else:
-            self.playStates[channelName] = not self.playStates.get(channelName)
-            if(self.playStates.get(channelName)):
-                self.sendToPd(channelName+" volume "+str(self.getChannelVolume(channelName)))
+        print(self.currentMode.get())
+        if(self.currentMode.get() == "play"):
+            if(self.currentGameMode == GameModes.SINGLE_HIT):
+                self.singleHit(channelName)
             else:
-                self.sendToPd(channelName+" volume 0")
-        
-            self.enableButton(channelName, self.playStates.get(channelName))
+                self.playStates[channelName] = not self.playStates.get(channelName)
+                if(self.playStates.get(channelName)):
+                    self.sendChannelVolumeToPd(channelName)
+                else:
+                    self.sendToPd(channelName+" volume 0")
+            
+                self.enableButton(channelName, self.playStates.get(channelName))
+        elif(self.currentMode.get() == "setMac"):
+            lastActiveMac = self.activeMacAddrLabel["text"]
+            self.conf["SensorNames"][lastActiveMac] = channelName   
+            self.currentMode.set("play")         
+        elif(self.currentMode.get() == "setVolume"):
+            self.currentChannelVolumeLabel["text"] = str(self.getChannelVolume(channelName, False))
+            self.selectedChannelName = channelName
+
+    def sendChannelVolumeToPd(self, channelName):
+        self.sendToPd(channelName+" volume "+str(self.getChannelVolume(channelName, True))) 
 
     def enableButton(self, channelName, enable):
         color = 'black' if enable else 'white'
@@ -102,7 +119,7 @@ class Application(Frame):
     def enableChannel(self, channelName):
         if(self.playStates[channelName]):
             return
-        self.sendToPd(channelName + " volume 1")
+        self.sendToPd(channelName + " volume "+str(self.getChannelVolume(channelName, True)))
         self.playStates[channelName] = True
     
     def disableChannel(self, channelName):
@@ -145,7 +162,7 @@ class Application(Frame):
 
 
     def getSensorBrightness(self): # the brightness of the lights in the sensor
-        if(self.currentStep.get("sensorBrightness")):
+        if(self.currentStep and self.currentStep.get("sensorBrightness")):
             return self.currentStep.get("sensorBrightness")
         return self.conf["SystemSettings"]["sensorBrightness"]
 
@@ -173,7 +190,7 @@ class Application(Frame):
         prevVal = self.sensorStates.get(sensorId)
         self.sensorStates[sensorId] = v
         print("sensorId: "+sensorId+", channel: "+channelName +  ", v: "+str(v)+ " s:"+str(s))
-        if(self.currentMode == GameModes.SINGLE_HIT):
+        if(self.currentGameMode == GameModes.SINGLE_HIT):
             if(s == 1):
                 self.singleHit(channelName)
                 self.buttons[channelName].configure(highlightbackground='red')
@@ -206,11 +223,9 @@ class Application(Frame):
             self.switchStep(lastStep)
 
         info = "currentStep: "+self.stepCombo.get()+"\n"
-        info += "currentMode: "+self.currentMode+"\n"
+        info += "currentGameMode: "+self.currentGameMode+"\n"
         self.client.publish("info", "info: "+info, 0)
 
-        with open("conf1.json", "w") as confFile:
-            json.dump(self.conf, confFile, indent=4, sort_keys=False)
 
     def switchStep(self, stepId):
 
@@ -237,19 +252,22 @@ class Application(Frame):
         self.switchSet(prevSetPath)
 
     def switchSet(self, path):
-        soundSet = self.conf["SoundSets"].get(path)
+        self.currentSet = self.conf["SoundSets"].get(path)
         self.setCombo.set(path)
 
-        self.currentMode = GameModes.SINGLE_HIT if soundSet['mode'] == 'SINGLE_HIT' else GameModes.LOOP
+        self.currentGameMode = GameModes.SINGLE_HIT if self.currentSet['mode'] == 'SINGLE_HIT' else GameModes.LOOP
 
-        if(self.currentMode == GameModes.SINGLE_HIT):
+        if(self.currentGameMode == GameModes.SINGLE_HIT):
             self.sendToPd("loop stop, all volume "+str(self.getMasterVolume()))
         else:
-            duration = soundSet['duration']
+            duration = self.currentSet['duration']
             self.sendToPd("loop start "+duration+", all volume 0") 
 
-        print("New mode: "+self.currentMode)
-        self.modeButton["text"] = "Mode: "+self.currentMode
+        print("New mode: "+self.currentGameMode)
+        self.infoLabel["text"] = ("Mode: {0}\n"
+                                  "MasterVolume: {1}\n"
+                                  "SensorBrightness: {2}").format(self.currentGameMode, self.getMasterVolume(), self.getSensorBrightness())
+        
         self.load()
         self.client.publish("info/set", path, 0)
       
@@ -269,6 +287,25 @@ class Application(Frame):
         pprint(self.setCombo.get())
         self.switchSet(self.setCombo.get())
 
+    def increaseChannelVolume(self):
+        self.setCurrentChannelVolume(self.getChannelVolume(self.selectedChannelName, False) + 0.1)
+        
+    def decreaseChannelVolume(self):
+        self.setCurrentChannelVolume(self.getChannelVolume(self.selectedChannelName, False) - 0.1)
+    
+    def setCurrentChannelVolume(self, v):
+        self.currentChannelVolumeLabel["text"] = str(v)
+        self.currentSet[self.selectedChannelName] = {}
+        self.currentSet[self.selectedChannelName]["volume"] = v
+        self.sendChannelVolumeToPd(self.selectedChannelName)
+        self.singleHit(self.selectedChannelName)
+
+    def saveConfig(self):
+        with open("conf1.json", "w") as confFile:
+            json.dump(self.conf, confFile, indent=4, sort_keys=False)
+        print("config saved: ")
+        pprint(self.conf)
+
     def createWidgets(self):
         topFrame = Frame(self)
         topFrame.pack( side = TOP)
@@ -283,29 +320,52 @@ class Application(Frame):
         self.setCombo.pack(side = LEFT)
         self.setCombo.bind("<<ComboboxSelected>>", self.onSetComboChanged)
 
-        self.modeButton = Button(topFrame)
-        self.modeButton.pack( side = LEFT)
+        contentFrame = Frame(self)
+        contentFrame.pack( side = LEFT )
+
+        contentLeft = Frame(contentFrame)
+        contentLeft.pack( side = LEFT )
+
+        contentMiddle = Frame(contentFrame)
+        contentMiddle.pack( side = LEFT )
+
+        contentRight = Frame(contentFrame)
+        contentRight.pack( side = LEFT )
 
         footerFrame = Frame(self)
         footerFrame.pack( side = BOTTOM )
+        
+        self.infoLabel = Label(contentRight, text="info", anchor='w')
+        self.infoLabel.pack(fill='both')
 
-        bottomFrame = Frame(self)
-        bottomFrame.pack( side = BOTTOM )
+        self.currentMode = StringVar()
+        Radiobutton(contentMiddle, text = "Play", variable = self.currentMode, value = "play").grid(row=0, column=0)
+        Radiobutton(contentMiddle, text = "Write Mac to config", variable = self.currentMode, value = "setMac").grid(row=1, column=0)
+        Radiobutton(contentMiddle, text = "Set volume", variable = self.currentMode, value = "setVolume").grid(row=2, column=0)
 
+        Button(contentMiddle, text="-", command=self.decreaseChannelVolume).grid(row=2, column=1)        
+        self.currentChannelVolumeLabel = Label(contentMiddle, text="vol")
+        self.currentChannelVolumeLabel.grid(row=2, column=2)
+        Button(contentMiddle, text="+", command=self.increaseChannelVolume).grid(row=2, column=3)        
+        
+        self.currentMode.set("play")
 
-        self.activeMacAddrLabel = Button(footerFrame, text='Last active mac',command=self.copyMacToClipBoard)
-        self.activeMacAddrLabel.pack(side = LEFT)
+        self.activeMacAddrLabel = Button(contentMiddle, text='Last active mac',command=self.copyMacToClipBoard)
+        self.activeMacAddrLabel.grid(row=3, column=0)
 
-        self.patchFirmwareButton = Button(footerFrame, text='Patch Firmware',command=self.patchFirmware)
-        self.patchFirmwareButton.pack( side = LEFT)
+        self.patchFirmwareButton = Button(contentMiddle, text='Patch Firmware',command=self.patchFirmware)
+        self.patchFirmwareButton.grid(row=4, column=0)
 
-        #self.activeMacAddressLabel = Label(bottomFrame)
+        self.saveButton = Button(contentMiddle, text='Save Configuration',command=self.saveConfig)
+        self.saveButton.grid(row=5, column=0)
+
+        #self.activeMacAddressLabel = Label(contentFrame)
         #self.activeMacAddressLabel.pack( side = LEFT)
 
         for c in range(len(self.cols)):
             for r in range(len(self.rows)):
                 channelName = str(self.rows[r])+" "+str(self.cols[c])
-                button = Button(bottomFrame, text=channelName, command=lambda sn=channelName:self.buttonPress(sn))
+                button = Button(contentLeft, text=channelName, command=lambda sn=channelName:self.buttonPress(sn))
                 button.grid(row=r, column=c)
                 self.buttons[channelName] = button
 

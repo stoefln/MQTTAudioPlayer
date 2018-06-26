@@ -7,12 +7,15 @@
     "SystemSettings": {
         "pdSendPath": "/Applications/Pd-0.48-1.app/Contents/Resources/bin/pdsend",
         "otaUpdateUrl": "http://192.168.0.164:8000/Firmware/moon_melon.bin",
-        "sensorBrightness": 200,
-        "sensorTriggerLevel": 200
+        "sensorBrightness": 255,
+        "sensorTriggerLevel": 400
     },
     "SoundSets": {
         "../media/clio-sounds": {
-            "mode": "SINGLE_HIT"
+            "mode": "SINGLE_HIT",
+            "A 1": {
+                "volume": 0.3
+            }
         },
         "../media/clio-hang": {
             "mode": "SINGLE_HIT"
